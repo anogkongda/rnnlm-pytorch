@@ -1,4 +1,3 @@
-torch
 typing
 logzero
 logger
@@ -6,7 +5,5 @@ uvicorn
 fastapi
 argparse
 requests
-urllib
-json
 pydantic
 email-validator
