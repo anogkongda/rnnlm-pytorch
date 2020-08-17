@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import data
-
 def opts2params(opts, dictionary: data.Dictionary):
     """Convert command line options to a dictionary to construct a model"""
     params = {
@@ -201,9 +200,10 @@ class CNNCharEmb(nn.Module):
         """ calculate convoluted hidden states of every kernel """
         for ksz in range(self.prm["char_kmin"], self.prm["char_kmax"]+1):
             # print(char_emb.shape)
+            pdb.set_trace()
             conved = self.conv_layers[ksz - 1](char_emb.permute(0,2,1))
             # print(conved.shape)
-            list_pooled.append(F.max_pool1d(conved,kernel_size=conved.shape[1]).squeeze(2))
+            list_pooled.append(F.max_pool1d(conved,kernel_size=conved.shape[2]).squeeze(2))
         # pooled: [seq_len*nbatch, char_hid]
         pooled = torch.cat(list_pooled, dim=1)
         # word_emb: [seq_len*nbatch, char_hid]
