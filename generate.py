@@ -122,7 +122,7 @@ def main():
         print("WARNING: Bidirectional language model is not supproted by this generator.")
         assert(False)
     model = models.RNNModel(params)
-    model.load_state_dict(torch.load(opts.load + ".pt"))
+    model.load_state_dict(torch.load(opts.load + ".pt", map_location='cpu'))
     if torch.cuda.is_available():
         if not opts.cuda:
             print("WARNING: You have a CUDA device, so you should probably run with --cuda")

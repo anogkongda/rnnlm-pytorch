@@ -200,7 +200,7 @@ class CNNCharEmb(nn.Module):
         """ calculate convoluted hidden states of every kernel """
         for ksz in range(self.prm["char_kmin"], self.prm["char_kmax"]+1):
             # print(char_emb.shape)
-            pdb.set_trace()
+            # pdb.set_trace()
             conved = self.conv_layers[ksz - 1](char_emb.permute(0,2,1))
             # print(conved.shape)
             list_pooled.append(F.max_pool1d(conved,kernel_size=conved.shape[2]).squeeze(2))
