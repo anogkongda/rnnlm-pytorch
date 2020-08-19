@@ -7,7 +7,7 @@ def opts2params(opts, dictionary: data.Dictionary):
     params = {
         "rnn_type" : opts.rnn_type,
         "direction" : opts.direction,
-        "tok_len" : dictionary.tok_len(),
+        "tok_len" : dictionary.tok_len() if not opts.wo_tok else dictionary.char_len(),
         "tok_emb" : opts.tok_emb,
         "tok_hid" : opts.tok_hid,
         "char_len" : dictionary.char_len(),
@@ -277,7 +277,7 @@ class RNNModel(nn.Module):
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-init_range, init_range)
 
-    def embed(self, input):
+    def embed(self, input, batchsize):
         """
         Calculate embeddings for each token
         
@@ -293,7 +293,10 @@ class RNNModel(nn.Module):
             # emb: [seq_len*nbatch, char_hid]
             emb = self.drop(self.char_encoder(input["char"]))
             # emb: [seq_len, nbatch, char_hid]
-            emb = emb.reshape(input["word"].shape[0], input["word"].shape[1], -1)
+            if batchsize is not None:
+                emb = emb.reshape(-1, batchsize, emb.shape[-1])
+            else:
+                emb = emb.reshape(input["word"].shape[0], input["word"].shape[1], -1)
         elif self.prm["wo_char"]:
             # emb: [seq_len, nbatch, tok_emb]
             emb = self.drop(self.word_encoder(input["word"]))
@@ -315,7 +318,7 @@ class RNNModel(nn.Module):
         self.word_encoder.weight.requires_grad=False
         self.decoder.weight.requires_grad=False
 
-    def forward(self, batch, hidden):
+    def forward(self, batch, hidden,batchsize=None, **kwargs):
         """
         Inputs
         ----------
@@ -330,7 +333,7 @@ class RNNModel(nn.Module):
         """
         # for mono-directional language models
         if self.prm["direction"] in ["left2right","right2left"]:
-            decoded, hidden = self.forward_one(batch, hidden)
+            decoded, hidden = self.forward_one(batch, hidden,batchsize)
         # for bi-directional language models
         elif self.prm["direction"] == "both":
             decoded, hidden = self.forward_both(batch, hidden)
@@ -338,7 +341,7 @@ class RNNModel(nn.Module):
             assert(False)
         return decoded, hidden
 
-    def forward_one(self, input, hidden):
+    def forward_one(self, input, hidden,batchsize=None, **kwargs):
         """
         For mono-directional language models
         
@@ -354,7 +357,7 @@ class RNNModel(nn.Module):
         
         """
         # emb: [seq_len, nbatch, ninp]
-        emb = self.embed(input)
+        emb = self.embed(input, batchsize)
         # output: [seq_len, nbatch, nhid], hidden: [nlayer, nbatch, nhid] or ([nlayer, nbatch, nhid], [nlayer, nbatch, nhid])
         output, hidden = self.rnn(emb, hidden)
         # output: [seq_len, nbatch, nhid]
@@ -431,20 +434,28 @@ class RNNModel(nn.Module):
         ----------
             Dict 
         """
-        bsz = batch["word"]["index"].shape[0]
+        bsz = batch['char']['batch_size']
+        # bsz = batch["word"]["index"].shape[0]
         seq_len = batch["char"]["seq_len"]
         tok_len = batch["char"]["tok_len"]
         # print(batch["char"]["seq_len"])
         # print(batch["char"]["tok_len"])
         # print(batch["char"]["index"].shape)
         # print(batch["word"]["index"].shape)
-        if seq_len != batch["word"]["index"].shape[1]:
-            assert(seq_len == batch["word"]["index"].shape[1])
+        # if seq_len != batch["word"]["index"].shape[1]:
+        #     assert(seq_len == batch["word"]["index"].shape[1])
         if self.prm["direction"] == "left2right":
             # input_word: [seq_len - 1, nbatch]
-            input_word = batch["word"]["index"][:,:-1].t().to(device)
+            if self.prm['wo_tok']:
+                input_word = None
+            else:
+                input_word = batch["word"]["index"][:,:-1].t().to(device)
             # input_char: [(seq_len - 1) * nbatch, tok_len]
-            input_char = batch["char"]["index"].reshape(bsz, seq_len, tok_len)[:,:-1,:].permute(1,0,2).reshape(bsz*(seq_len-1), tok_len).to(device)
+            if self.prm['wo_tok']:
+
+                input_char = batch["char"]["index"].reshape(bsz, seq_len, tok_len).permute(1,0,2).reshape(bsz*(seq_len), tok_len).to(device)
+            else:
+                input_char = batch["char"]["index"].reshape(bsz, seq_len, tok_len)[:,:-1,:].permute(1,0,2).reshape(bsz*(seq_len-1), tok_len).to(device)
         elif self.prm["direction"] == "right2left":
             # input_word: [seq_len - 1, nbatch]
             input_word = torch.flip(batch["word"]["index"], [0])[:,:-1].t().to(device)
@@ -499,7 +510,10 @@ class RNNModel(nn.Module):
         """
         if self.prm["direction"] == "left2right":
             # target_flat: [(seq_len - 1) * nbatch]
-            target_flat = batch["word"]["index"].t()[1:].contiguous().view(-1).to(device)
+            if self.prm['wo_tok']:
+                target_flat = batch["char"]["index"].t()[1:].contiguous().view(-1).to(device)
+            else:
+                target_flat = batch["word"]["index"].t()[1:].contiguous().view(-1).to(device)
         elif self.prm["direction"] == "right2left":
             # target_flat: [(seq_len - 1) * nbatch]
             target_flat = torch.flip(batch["word"]["index"].t(), [0])[1:].contiguous().view(-1).to(device)
@@ -523,7 +537,7 @@ class RNNModel(nn.Module):
         ----------
             Tuple 
         """
-        bsz = batch["word"]["index"].shape[0]
+        bsz = batch['char']['batch_size']
         # make a tensor whose type is similar to current model weights
         weight = next(self.parameters())
         # Joointly initialize the memory and hidden states for each layer

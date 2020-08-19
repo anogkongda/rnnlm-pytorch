@@ -30,7 +30,7 @@ class Dictionary(object):
         word_sorted = sorted(self.word2count.items(), key=lambda x:x[1], reverse=True)
         for word, freq in word_sorted:
             # Skip a word whose frequency is less than cut-off limit. If the cut_freq is a minus value, there are no frequency limit.
-            if freq >= cut_freq or cut_freq < 0:
+            if freq >= cut_freq or cut_freq <= 0:
                 if len(self.idx2word) < max_vocab_size and word not in self.word2idx:
                     self.idx2word.append(word)
                     self.word2idx[word] = len(self.idx2word) - 1
@@ -56,7 +56,7 @@ class Dictionary(object):
     
     def set_pad(self):
         self.idx2word.append("<pad>")
-        self.word2idx["<pad>"] = len(self.idx2char) - 1
+        self.word2idx["<pad>"] = len(self.idx2word) - 1
         self.idx2char.append("<pad>")
         self.char2idx["<pad>"] = len(self.idx2char) - 1
     
@@ -144,6 +144,23 @@ class Corpus(object):
         
     def sent2ids(self, words):
         return [[self.dictionary.conv2id(word) for word in words], [[self.dictionary.char_conv2id(char) for char in word] for word in words]]
+
+def text2input(text, dictionary):
+    text = text.split()
+    sent_ids = ([["Nothing"], [[dictionary.char_conv2id(char) for char in word] for word in text]])
+    char_tensor, batch_size, max_seq_len, max_token_len = char_list2tensor([sent_ids[1]], dictionary)
+    return {
+        "word" : {
+            "index" : None
+        },
+        "char" : {
+            "index" : char_tensor.contiguous(),
+            "batch_size": batch_size,
+            "seq_len" : max_seq_len,
+            "tok_len" : max_token_len
+        }
+    }
+
 
 def data2batch(data, dictionary, bsz, flag_shuf=False, flag_char=False):
     if flag_shuf:

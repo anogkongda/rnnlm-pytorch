@@ -81,20 +81,20 @@ def evaluate(opts, corpus, input_texts, model, criterion, device):
             hidden = models.repackage_hidden(hidden)
             # LongTensor of token_ids [seq_len, batch_size]
             input = model.batch2input(batch, device)
-            seq_len = input["word"].shape[0]
-            batch_size = input["word"].shape[1]
+            seq_len = batch['char']['seq_len']
+            batch_size = batch['char']['batch_size']
             # target_flat: LongTensor of token_ids [seq_len*batch_size]
             target_flat = model.batch2flat(batch, device)
             # clear previous gradients
             model.zero_grad()
             # output: [seq_len, nbatch, ntoken], hidden: [nlayer, nbatch, nhid]
-            output, hidden = model(input, hidden)
+            output, hidden = model(input, hidden, batch_size)
             # output_flat: LongTensor of token_ids [seq_len*batch_size, ntoken]
             output_flat = output.view(-1, output.shape[2])
             # batch_loss: LongTensor of token_ids [seq_len*batch_size]
             batch_loss = criterion(output_flat, target_flat)
             # batch_loss: LongTensor of token_ids [seq_len, batch_size]
-            batch_loss = batch_loss.reshape(seq_len, batch_size)
+            batch_loss = batch_loss.reshape(-1, batch_size)
             # batch_loss: LongTensor of token_ids [batch_size]
             batch_loss = torch.mean(batch_loss, 0)
             for sent_loss in batch_loss:
@@ -128,6 +128,8 @@ def main():
     model.to(device)
     model.eval()
     
+    
+
     ###############################################################################
     # Load dictionary
     ###############################################################################
@@ -137,6 +139,15 @@ def main():
    
     criterion = nn.CrossEntropyLoss(reduction="none", ignore_index=corpus.dictionary.pad_id())
     
+
+    input_text = "<s> SUPERVISA LEMISS"
+    inp = data.text2input(input_text, corpus.dictionary)
+    hid = model.init_hidden(inp)
+    hid = models.repackage_hidden(hid)
+    inp = model.batch2input(inp, device)
+    o1,s1 = model(inp, hid, 1)
+    ntext = model.batch2input(data.text2input("I", corpus.dictionary), device)
+
     ###############################################################################
     # Run as a server 
     ###############################################################################
